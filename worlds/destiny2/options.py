@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Options import Choice, OptionGroup, PerGameCommonOptions, Range, Toggle
+from Options import Choice, OptionGroup, PerGameCommonOptions, Range, Toggle, OptionList
 
 # In this file, we define the options the player can pick.
 # The most common types of options are Toggle, Range and Choice.
@@ -8,11 +8,18 @@ from Options import Choice, OptionGroup, PerGameCommonOptions, Range, Toggle
 # Options will be in the game's template yaml.
 # They will be represented by checkboxes, sliders etc. on the game's options page on the website.
 # (Note: Options can also be made invisible from either of these places by overriding Option.visibility.
-#  APQuest doesn't have an example of this, but this can be used for secret / hidden / advanced options.)
+#  Destiny doesn't have an example of this, but this can be used for secret / hidden / advanced options.)
 
 # For further reading on options, you can also read the Options API Document:
 # https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/options%20api.md
 
+
+class Items(OptionList):
+    """
+    Add your vault items in here
+    You can get your vault items by doing : TODO
+    """
+    display_name = "Items"
 
 # The first type of Option we'll discuss is the Toggle.
 # A toggle is an option that can either be on or off. This will be represented by a checkbox on the website.
@@ -107,7 +114,8 @@ class PlayerSprite(Choice):
 # We must now define a dataclass inheriting from PerGameCommonOptions that we put all our options in.
 # This is in the format "option_name_in_snake_case: OptionClassName".
 @dataclass
-class APQuestOptions(PerGameCommonOptions):
+class DestinyOptions(PerGameCommonOptions):
+    items: Items
     hard_mode: HardMode
     hammer: Hammer
     extra_starting_chest: ExtraStartingChest

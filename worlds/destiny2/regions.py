@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from rule_builder.rules import Has
+from rule_builder.rules import Has, True_
 from BaseClasses import Entrance, Region
 
 if TYPE_CHECKING:
-    from .world import APQuestWorld
+    from .world import DestinyWorld
 
 # A region is a container for locations ("checks"), which connects to other regions via "Entrance" objects.
 # Many games will model their Regions after physical in-game places, but you can also have more abstract regions.
@@ -21,12 +21,12 @@ CAMPAIGNS = []
 DUNGEONS = []
 RAIDS = []
 
-def create_region(world: APQuestWorld, region: str, orbit: Region) -> None:
+def create_region(world: DestinyWorld, region: str, orbit: Region) -> None:
     reg = Region(region, world.player, world.multiworld)
     world.multiworld.regions.append(reg)
-    world.create_entrance(orbit, reg, Has(region + " Key"))
+    world.create_entrance(orbit, reg, True_())  #Has(region + " Key"))
 
-def create_and_connect_regions(world: APQuestWorld) -> None:
+def create_and_connect_regions(world: DestinyWorld) -> None:
     # Creating a region is as simple as calling the constructor of the Region class.
     orbit = Region("Orbit", world.player, world.multiworld)
     world.multiworld.regions.append(orbit)

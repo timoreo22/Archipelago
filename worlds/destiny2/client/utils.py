@@ -10,7 +10,7 @@ def make_data_directory(dir_name: str) -> Path:
 
     data_directory = root_directory / "data"
 
-    specific_data_directory = data_directory / "apquest" / dir_name
+    specific_data_directory = data_directory / "destiny2" / dir_name
     specific_data_directory.mkdir(parents=True, exist_ok=True)
 
     gitignore = specific_data_directory / ".gitignore"
