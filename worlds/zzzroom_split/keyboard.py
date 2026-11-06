@@ -1,5 +1,3 @@
-import tty
-
 import contextlib
 try:
     import msvcrt
@@ -16,7 +14,7 @@ try:
         return char
     set_terminal_raw = contextlib.nullcontext
 except ImportError:
-    import sys, termios, select
+    import sys, termios, select, tty
     def init():
         pass
     def has_input():
