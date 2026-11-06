@@ -117,58 +117,63 @@ def deepcopy(x, memo=None):
 
     See the module's __doc__ string for more info.
     """
+    try:
+        cls = type(x)
 
-    cls = type(x)
+        if cls in _atomic_types:
+            return x
 
-    if cls in _atomic_types:
-        return x
-
-    d = id(x)
-    if memo is None:
-        memo = {}
-    else:
-        if d in memo:
-            return memo[d]
-
-    copier = _deepcopy_dispatch.get(cls)
-    if copier is not None:
-        y = copier(x, memo)
-    else:
-        if issubclass(cls, type):
-            y = x # atomic copy
+        d = id(x)
+        if memo is None:
+            memo = {}
         else:
-            copier = getattr(x, "__deepcopy__", None)
-            if copier is not None:
-                y = copier(memo)
+            if d in memo:
+                return memo[d]
+
+        copier = _deepcopy_dispatch.get(cls)
+        if copier is not None:
+            y = copier(x, memo)
+        else:
+            if issubclass(cls, type):
+                y = x # atomic copy
             else:
-                reductor = dispatch_table.get(cls)
-                if reductor:
-                    rv = reductor(x)
+                copier = getattr(x, "__deepcopy__", None)
+                if copier is not None:
+                    y = copier(memo)
                 else:
-                    reductor = getattr(x, "__reduce_ex__", None)
-                    if reductor is not None:
-                        rv = reductor(4)
+                    reductor = dispatch_table.get(cls)
+                    if reductor:
+                        rv = reductor(x)
                     else:
-                        reductor = getattr(x, "__reduce__", None)
-                        if reductor:
-                            rv = reductor()
+                        reductor = getattr(x, "__reduce_ex__", None)
+                        if reductor is not None:
+                            rv = reductor(4)
                         else:
-                            raise Error(
-                                "un(deep)copyable object of type %s" % cls)
-                if isinstance(rv, str):
-                    y = x
-                else:
-                    y = _reconstruct(x, memo, *rv)
+                            reductor = getattr(x, "__reduce__", None)
+                            if reductor:
+                                rv = reductor()
+                            else:
+                                raise Error(
+                                    "un(deep)copyable object of type %s" % cls)
+                    if isinstance(rv, str):
+                        y = x
+                    else:
+                        y = _reconstruct(x, memo, *rv)
 
-    # If is its own copy, don't memoize.
-    if y is not x:
-        memo[d] = y
-        _keep_alive(x, memo) # Make sure x lives at least as long as d
-    return y
+        # If is its own copy, don't memoize.
+        if y is not x:
+            memo[d] = y
+            _keep_alive(x, memo) # Make sure x lives at least as long as d
+        return y
+    except:
+        import logging
+        logging.info("Error trying to copy %s", x)
+        raise
 
+from threading import Thread, Lock, RLock
 _atomic_types = frozenset({types.NoneType, types.EllipsisType, types.NotImplementedType,
           int, float, bool, complex, bytes, str, types.CodeType, type, range, types.ModuleType, types.ClassMethodDescriptorType,
-          types.BuiltinFunctionType, weakref.ref, property})
+          types.BuiltinFunctionType, weakref.ref, property, Thread, Lock, RLock})
 
 _deepcopy_dispatch = d = {}
 
