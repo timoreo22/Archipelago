@@ -79,6 +79,11 @@ class RoomSplitWorld(World):
 
     @classmethod
     def stage_create_items(cls, multiworld: MultiWorld) -> None:
+        # Avoid doing a gen if ut is there
+        is_ut = getattr(multiworld, "generation_is_fake", False)
+        if is_ut:
+            return
+
         logger = logging.getLogger()
 
         # Nuke all itemlink "players"
@@ -352,7 +357,7 @@ def resume_multiworld(args, multiworld: MultiWorld, gen_number):
                 precollected_items = {player: [item.code for item in world_precollected if type(item.code) == int]
                                       for player, world_precollected in multiworld.precollected_items.items()}
                 precollected_hints: dict[int, set[NetUtils.Hint]] = {
-                    player: set() for player in range(1, multiworld.players + 1 + len(multiworld.groups))
+                    player: set() for player in range(1, len(games) + 1)
                 }
 
                 for slot in multiworld.player_ids:
