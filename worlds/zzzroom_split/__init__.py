@@ -11,12 +11,12 @@ import logging
 import os
 import tempfile
 import time
-from typing import Any, Tuple, Optional, List
+from typing import Any, Optional, List
 import zipfile
 import zlib
 
 import worlds
-from BaseClasses import Item, Location, LocationProgressType, MultiWorld, CollectionState, Group, Spoiler
+from BaseClasses import Item, Location, LocationProgressType, MultiWorld, CollectionState, Spoiler
 from Fill import FillError, balance_multiworld_progression, distribute_items_restrictive, flood_items, \
     parse_planned_blocks, distribute_planned_blocks, resolve_early_locations_for_planned
 from NetUtils import convert_to_base_types
@@ -40,9 +40,24 @@ class RoomCountOption(Range):
     range_end = 4
     default = 2
 
+class TimeLimitOption(Range):
+    """
+    How much time in seconds to wait before considering the rooms to be split apart "enough"
+    The algorithm for splitting rooms apart may run for a very long time for 3+ rooms and enough players, this adds a time cap to this generation
+    Setting it to 0 will let it run forever
+    No matter this setting, you can press q on the generation window at any moment to stop it at its current progress
+    """
+
+    display_name = "Time Limit"
+
+    range_start = 0
+    range_end = 100000
+    default = 600
+
 @dataclass
 class RoomSplitOptions(PerGameCommonOptions):
     room_count: RoomCountOption
+    time_limit: TimeLimitOption
 
 class RoomSplitWorld(World):
     game = "Room Splitter"
@@ -52,16 +67,19 @@ class RoomSplitWorld(World):
     options_dataclass = RoomSplitOptions
     options: RoomSplitOptions
     room_count: int = 2
+    time_limit: float = 600
     pid: int = 0
 
     def generate_early(self):
         # Injects into the class, last yaml loaded will count
         self.__class__.room_count = self.options.room_count.value
+        self.__class__.time_limit = self.options.time_limit.value
         self.__class__.pid = self.player
 
     @classmethod
     def stage_create_items(cls, multiworld: MultiWorld) -> None:
         logger = logging.getLogger()
+
         # Nuke all itemlink "players"
         itemlinks = list(multiworld.groups.keys())
         def delete_player(player):
@@ -83,7 +101,10 @@ class RoomSplitWorld(World):
         numroom = cls.room_count
         logger.info("Splitting room into %d", numroom)
         data = {player: len(locations) for player, locations in multiworld.regions.location_cache.items()}
-        out = algorithm.anytime(numroom, data, 600)
+        if cls.time_limit == 0:
+            import math
+            cls.time_limit = math.inf
+        out = algorithm.anytime(numroom, data, cls.time_limit)
         if out is None:
             logger.error("Error, search stopped too soon !!")
             raise InterruptedError
@@ -91,22 +112,21 @@ class RoomSplitWorld(World):
         logger.info("Max difference of checks between rooms : " + str(max(sums) - min(sums)))
         # TODO make this modifiable ?
         args = Namespace(skip_prog_balancing=False, skip_output=False, spoiler_only=False, spoiler=1)
-        from worlds.tunic import TunicWorld
         gen_number = 1
+
+        # Fixes deep copy crashing with lingo, maybe make it configurable ?
         from sys import setrecursionlimit
-        #old_limit = getrecursionlimit()
         setrecursionlimit(20000)
 
         for playerset in out[1]:
             logger.info("Preparing gen %d", gen_number)
             playerset = sorted(playerset)
             count = len(playerset)
-            #old_to_new = {v:i for i,v in enumerate(playerset,start=1)}
             playerset = set(playerset)
+
+            # Deep copy of multiword, making sure only the players that need to be there are
             new_mw = MultiWorld(count)
             memo = {id(multiworld) : new_mw}
-
-
 
             new_mw.debug_types = multiworld.debug_types
             new_mw.is_race = multiworld.is_race
@@ -114,6 +134,7 @@ class RoomSplitWorld(World):
 
             new_mw.player_name = {k:v for k,v in deepcopy(multiworld.player_name, memo).items() if k in playerset}
 
+            # These methods don't play well if the player ids aren't sequential, patching them here
             # Dear lord what the fuck is this
             new_mw.__dict__["player_ids"] = tuple(new_mw.player_name.keys())
             def has_beaten_game(self, state: CollectionState, player: Optional[int] = None) -> bool:
@@ -145,16 +166,8 @@ class RoomSplitWorld(World):
             new_mw.regions.region_cache = {k : v for k,v in deepcopy(multiworld.regions.region_cache, memo).items() if k in playerset}
 
             new_mw.state = deepcopy(multiworld.state, memo)
-            # new_mw.state = CollectionState(new_mw)
-            # # push each precollected item into the state
-            # for items in new_mw.precollected_items.values():
-            #     for i in items:
-            #         new_mw.state.collect(i, True)
-            # # --- TUNIC FIX !!!! --- (do other games do this ?)
-            #
-            # TunicWorld.seed_groups = {}
-            # TunicWorld.stage_generate_early(new_mw)
 
+            # Rebuild the itemlinks
             new_mw.set_item_links()
             logger.info("Starting generation %d", gen_number)
             del memo
@@ -328,7 +341,7 @@ def resume_multiworld(args, multiworld: MultiWorld, gen_number):
                     games[slot] = multiworld.game[slot]
                     slot_info[slot] = NetUtils.NetworkSlot(group["name"], multiworld.game[slot], multiworld.player_types[slot],
                                                            group_members=sorted(group["players"]))
-                # Fills holes with "Archipelago" Slots
+                # PATCH : Fills holes with "Archipelago" Slots
                 for x in range(1, max(games.keys()) + 1):
                     if x not in games:
                         games[x] = "Archipelago"
@@ -355,6 +368,7 @@ def resume_multiworld(args, multiworld: MultiWorld, gen_number):
                         for player in multiworld.groups[location.item.player]["players"]:
                             precollected_hints[player].add(hint)
 
+                # PATCH : include all players in the locations
                 locations_data: dict[int, dict[int, tuple[int, int, int]]] = {player: {} for player in games.keys()}
                 for location in multiworld.get_filled_locations():
                     if type(location.address) == int:
