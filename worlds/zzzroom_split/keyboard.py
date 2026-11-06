@@ -3,6 +3,10 @@ import tty
 import contextlib
 try:
     import msvcrt
+    def init():
+        import colorama
+        colorama.just_fix_windows_console()
+
     def has_input():
         return msvcrt.kbhit()
     def get_input():
@@ -13,6 +17,8 @@ try:
     set_terminal_raw = contextlib.nullcontext
 except ImportError:
     import sys, termios, select
+    def init():
+        pass
     def has_input():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
     def get_input() -> str:
@@ -35,4 +41,4 @@ def get_key() -> None|str:
             return get_input()
     return None
 
-__all__ = ['get_key']
+__all__ = ['get_key', 'init']

@@ -5,7 +5,7 @@ import time
 
 import math
 from typing import List, Tuple, TypeVar
-from worlds.zzzroom_split.keyboard import get_key
+from worlds.zzzroom_split.keyboard import get_key, init as init_keyboard
 
 T = TypeVar('T')
 BinsArray = Tuple[List[int], List[List[T]]]  # Here, each bins-array is a tuple: sums,lists. sums is an array of sums; lists is a list of lists of items.
@@ -61,6 +61,7 @@ def anytime(
 
     :param time_limit: determines how much time (in seconds) the function should run before it stops. Default is infinity.
     """
+    init_keyboard()
     print("type q whenever you wanna stop the search, will stop after 10 minutes or if it finds the best solution")
     print("Starting up....")
     items: List[T] = list(data.keys())
