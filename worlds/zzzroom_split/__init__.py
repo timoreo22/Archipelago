@@ -32,12 +32,13 @@ from worlds.zzzroom_split.deepercopy import deepcopy
 class RoomCountOption(Range):
     """
     How many Rooms to split this generation into
+    Having more than 4 rooms can slow down the room splitting algorithm by a lot
     """
 
     display_name = "Room Count"
 
     range_start = 2
-    range_end = 4
+    range_end = 20
     default = 2
 
 class TimeLimitOption(Range):
