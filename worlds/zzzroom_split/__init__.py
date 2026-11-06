@@ -61,7 +61,7 @@ class RoomSplitOptions(PerGameCommonOptions):
 
 class RoomSplitWorld(World):
     game = "Room Splitter"
-    hidden = True
+    hidden = False
     item_name_to_id = {}
     location_name_to_id = {}
     options_dataclass = RoomSplitOptions
