@@ -137,7 +137,11 @@ def deepcopy(x, memo=None):
             if issubclass(cls, type):
                 y = x # atomic copy
             else:
-                copier = getattr(x, "__deepcopy__", None)
+                copier = None
+                try:
+                    copier = getattr(x, "__deepcopy__", None)
+                except:
+                    pass
                 if copier is not None:
                     y = copier(memo)
                 else:
@@ -145,11 +149,17 @@ def deepcopy(x, memo=None):
                     if reductor:
                         rv = reductor(x)
                     else:
-                        reductor = getattr(x, "__reduce_ex__", None)
+                        try:
+                            reductor = getattr(x, "__reduce_ex__", None)
+                        except:
+                            reductor = x.__getattribute__("__reduce_ex__")
                         if reductor is not None:
                             rv = reductor(4)
                         else:
-                            reductor = getattr(x, "__reduce__", None)
+                            try:
+                                reductor = getattr(x, "__reduce__", None)
+                            except:
+                                pass
                             if reductor:
                                 rv = reductor()
                             else:
@@ -170,7 +180,7 @@ def deepcopy(x, memo=None):
         logging.info("Error trying to copy %s", x)
         raise
 
-from threading import Thread, Lock, RLock
+from threading import Thread, Lock, RLock, Event
 _atomic_types = frozenset({types.NoneType, types.EllipsisType, types.NotImplementedType,
           int, float, bool, complex, bytes, str, types.CodeType, type, range, types.ModuleType, types.ClassMethodDescriptorType,
           types.BuiltinFunctionType, weakref.ref, property, Thread, Lock, RLock})
@@ -219,14 +229,24 @@ d[types.MethodType] = _deepcopy_method
 # --- Added code Start ---
 
 def _deepcopy_function(x, memo, deepcopy=deepcopy):
+    # Create placeholder closure
+    clo = []
+    if x.__closure__ is not None:
+        for _ in range(len(x.__closure__)):
+            clo.append(types.CellType(0))
     y = type(x)(
-        deepcopy(x.__code__, memo),
-        #deepcopy(x.__globals__, memo),
+        x.__code__,
         x.__globals__,
-        deepcopy(x.__name__, memo),
-        deepcopy(x.__defaults__, memo),
-        deepcopy(x.__closure__, memo))
+        x.__name__,
+        x.__defaults__,
+        None if x.__closure__ is None else tuple(clo))
     memo[id(x)] = y
+    y.__code__ = deepcopy(x.__code__, memo)
+    y.__name__ = deepcopy(x.__name__, memo)
+    y.__defaults__ = deepcopy(x.__defaults__, memo)
+    for i in range(len(clo)):
+        y.__closure__[i].cell_contents = deepcopy(x.__closure__[i].cell_contents, memo)
+
     vars(y).update(deepcopy(vars(x),memo))
     y.__annotations__.update(x.__annotations__)
     if x.__kwdefaults__ is not None:
@@ -242,6 +262,23 @@ def _deepcopy_cell(x: types.CellType, memo, deepcopy=deepcopy):
     return y
 
 d[types.CellType] = _deepcopy_cell
+
+def _deepcopy_event(x: Event, memo):
+    y = type(x)()
+    memo[id(x)] = y
+    return y
+
+d[Event] = _deepcopy_event
+
+def _deepcopy_dictkeys(x, memo, deepcopy=deepcopy):
+    y = set()
+    memo[id(x)] = y
+    # TODO this breaks the link between the dict and the keys, how to restore it ?
+    y.update(deepcopy(x.mapping, memo).keys())
+    return y
+
+d[types.MappingProxyType] = _deepcopy_dict
+d[type({}.keys())] = _deepcopy_dictkeys
 
 # --- Added code End ---
 del d
@@ -275,7 +312,16 @@ def _reconstruct(x, memo, func, args,
     if state is not None:
         if deep:
             state = deepcopy(state, memo)
-        if hasattr(y, '__setstate__'):
+        attr = False
+        try:
+            attr = hasattr(y, '__setstate__')
+        except:
+            try:
+                y.__getattribute__('__setstate__')
+                attr = True
+            except AttributeError:
+                pass
+        if attr:
             y.__setstate__(state)
         else:
             if isinstance(state, tuple) and len(state) == 2:
@@ -307,7 +353,7 @@ def _reconstruct(x, memo, func, args,
                 y[key] = value
     return y
 
-del types, weakref
+del weakref
 
 
 def replace(obj, /, **changes):
