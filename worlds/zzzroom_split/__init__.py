@@ -1,6 +1,7 @@
 from argparse import Namespace
 from dataclasses import dataclass
 
+import NetUtils
 import Options
 import Utils
 from worlds.AutoWorld import World
@@ -83,7 +84,8 @@ class RoomSplitWorld(World):
         is_ut = getattr(multiworld, "generation_is_fake", False)
         if is_ut:
             return
-
+        from faulthandler import enable
+        enable()
         logger = logging.getLogger()
 
         # Nuke all itemlink "players"
@@ -151,7 +153,6 @@ class RoomSplitWorld(World):
             new_mw.__dict__["has_beaten_game"] = has_beaten_game.__get__(new_mw, MultiWorld)
 
             new_mw.player_types = {k:v for k,v in deepcopy(multiworld.player_types, memo).items() if k in playerset}
-            new_mw.indirect_connections = deepcopy(multiworld.indirect_connections, memo)
             new_mw.set_seed(multiworld.seed)
 
             new_mw.game = {k:v for k,v in deepcopy(multiworld.game, memo).items() if k in playerset}
@@ -170,11 +171,39 @@ class RoomSplitWorld(World):
             new_mw.regions.entrance_cache = {k : v for k,v in deepcopy(multiworld.regions.entrance_cache, memo).items() if k in playerset}
             new_mw.regions.location_cache = {k : v for k,v in deepcopy(multiworld.regions.location_cache, memo).items() if k in playerset}
             new_mw.regions.region_cache = {k : v for k,v in deepcopy(multiworld.regions.region_cache, memo).items() if k in playerset}
+            new_mw.indirect_connections = deepcopy(multiworld.indirect_connections, memo)
 
             new_mw.state = deepcopy(multiworld.state, memo)
 
             # Rebuild the itemlinks
             new_mw.set_item_links()
+
+            from worlds.AutoWorld import World
+            # Adding in the fake players !!
+            padding = []
+            for x in range(1, len(new_mw.player_ids) + len(new_mw.groups) + 1):
+                if x not in new_mw.player_ids and x not in new_mw.groups:
+                    padding.append(x)
+                    new_mw.game[x] = "Archipelago"
+                    new_mw.early_items[x] = {}
+                    new_mw.local_early_items[x] = {}
+                    new_mw.completion_condition[x] = lambda x: True
+                    new_mw.precollected_items[x] = []
+                    new_mw.player_name[x] = "Padding" + str(x)
+                    new_mw.player_types[x] = NetUtils.SlotType.spectator
+
+                    new_mw.regions.add_group(x)
+                    world = World(multiworld, x)
+                    world.game = "Archipelago"
+                    world.options = World.options_dataclass(**{option_key: option.from_any(option.default)
+                                                             for option_key, option in
+                                                             World.options_dataclass.type_hints.items()})
+                    world.options.accessibility = Options.ItemsAccessibility(Options.ItemsAccessibility.option_items)
+                    new_mw.worlds[x] = world
+
+
+            new_mw.__dict__["player_ids"] = tuple(sorted(new_mw.player_ids + tuple(padding)))
+
             logger.info("Starting generation %d", gen_number)
             del memo
             resume_multiworld(args,new_mw, gen_number)
@@ -347,12 +376,6 @@ def resume_multiworld(args, multiworld: MultiWorld, gen_number):
                     games[slot] = multiworld.game[slot]
                     slot_info[slot] = NetUtils.NetworkSlot(group["name"], multiworld.game[slot], multiworld.player_types[slot],
                                                            group_members=sorted(group["players"]))
-                # PATCH : Fills holes with "Archipelago" Slots
-                for x in range(1, max(games.keys()) + 1):
-                    if x not in games:
-                        games[x] = "Archipelago"
-                        slot_info[x] = NetUtils.NetworkSlot("Padding" + str(x), "Archipelago", NetUtils.SlotType.spectator)
-
 
                 precollected_items = {player: [item.code for item in world_precollected if type(item.code) == int]
                                       for player, world_precollected in multiworld.precollected_items.items()}
@@ -367,6 +390,9 @@ def resume_multiworld(args, multiworld: MultiWorld, gen_number):
                     entrance = er_hint_data.get(location.player, {}).get(location.address, "")
                     hint = NetUtils.Hint(location.item.player, location.player, location.address,
                                          location.item.code, False, entrance, location.item.flags, auto_status)
+                    if location.player not in precollected_hints:
+                        logger.info("Hint deleted due to being for an invalid player")
+                        return # ????
                     precollected_hints[location.player].add(hint)
                     if location.item.player not in multiworld.groups:
                         precollected_hints[location.item.player].add(hint)
